@@ -22,8 +22,7 @@ func worker(id int, conn *Stream, stat chan<- bool) {
 		conn.Write(msg)
 		resp, _ := r.ReadString('\n')
 		resp = strings.TrimSpace(resp)
-		fmt.Printf("[%s] Received `%s`\n", clientId, resp)
-		time.Sleep(time.Second)
+		stat <- (resp == clientId) // send stats
 	}
 }
 
@@ -34,6 +33,25 @@ func client() {
 	}
 
 	stats := make(chan bool, 100)
+	ticker := time.NewTicker(time.Second)
+	matched := 0
+	unmatched := 0
+	go func() {
+		for {
+			select {
+			case isMatched := <-stats:
+				if isMatched {
+					matched += 1
+				} else {
+					unmatched += 1
+				}
+			case <-ticker.C:
+				log.Printf("Stats per sec. Matched: %d, Unmatched: %d, Total: %d", matched, unmatched, matched+unmatched)
+				matched = 0
+				unmatched = 0
+			}
+		}
+	}()
 
 	plexClient := NewMultiplexClient(conn)
 	numClient := 5
