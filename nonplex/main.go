@@ -101,7 +101,7 @@ func server() {
 			defer c.Close()
 			r := bufio.NewReader(c)
 			for {
-				line, err := r.ReadString('\n')
+				line, err := r.ReadBytes('\n')
 				if err != nil {
 					break
 				}
