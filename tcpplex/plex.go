@@ -82,13 +82,15 @@ func (h *Handle) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
+// Close active close connection
 func (h *Handle) Close() error {
 	h.Lock()
 	defer h.Lock()
 
 	h.send(packet{
 		handleId: h.id,
-		// flag here
+		flag:     FFIN,
+		data:     []byte{},
 	})
 
 	close(h.in)
@@ -145,7 +147,8 @@ func (c *MultiPlexClient) NewHandle() (*Handle, error) {
 		in:  make(chan packet, 100),
 		out: make(chan packet, 100),
 	}
-	c.maxId += 1
+
+	c.maxId += 1 // should generate uuid
 	if err := h.Dial(); err != nil {
 		return nil, err
 	}
@@ -174,7 +177,13 @@ func (c *MultiPlexClient) loopRead() {
 			continue
 		}
 
-		// handle multiple flag here
+		// handle passive close
+		if p.flag&FFIN == FFIN {
+			close(h.in)
+			close(h.out)
+			delete(c.hs, p.handleId)
+			return
+		}
 
 		h.in <- *p
 	}
@@ -182,7 +191,11 @@ func (c *MultiPlexClient) loopRead() {
 
 func (c *MultiPlexClient) loopWrite() {
 	for p := range c.bufOut {
-		// handle multiple packet flag here
+		// handle active close
+		if p.flag&FFIN == FFIN {
+			delete(c.hs, p.handleId)
+		}
+
 		encode(c.conn, p)
 	}
 }
@@ -224,11 +237,8 @@ func (s *MultiPlexServer) loopRead() {
 
 		h, ok := s.hs[p.handleId]
 		if !ok {
-			// just ignore invalid packet
 			continue
 		}
-
-		// handle multiple flag here
 
 		// handle SYNC new connection
 		if p.flag&FSYNC == FSYNC {
@@ -253,13 +263,25 @@ func (s *MultiPlexServer) loopRead() {
 			return
 		}
 
+		// handle passive close
+		if p.flag&FFIN == FFIN {
+			close(h.in)
+			close(h.out)
+			delete(s.hs, p.handleId)
+			return
+		}
+
 		h.in <- *p
 	}
 }
 
 func (s *MultiPlexServer) loopWrite() {
 	for p := range s.bufOut {
-		// handle multiple packet flag here
+		// handle active close
+		if p.flag&FFIN == FFIN {
+			delete(s.hs, p.handleId)
+		}
+
 		encode(s.conn, p)
 	}
 }
