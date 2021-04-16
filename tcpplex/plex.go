@@ -26,8 +26,8 @@ func NewMultiplexClient(conn net.Conn) *MultiPlexClient {
 		outBuf:  make(chan packet, 1000),
 	}
 
-	go c.loopRead()
 	go c.loopWrite()
+	go c.loopRead()
 	return c
 }
 
@@ -113,8 +113,8 @@ func NewMultiplexServer(conn net.Conn) *MultiPlexServer {
 		outBuf:  make(chan packet, 1000),
 	}
 
-	go sv.loopRead()
 	go sv.loopWrite()
+	go sv.loopRead()
 	return sv
 }
 

@@ -45,11 +45,10 @@ func (s *Stream) Write(b []byte) (int, error) {
 	if s.closed {
 		return 0, ErrStreamClosed
 	}
-	p := packet{
+	s.out <- packet{
 		StreamID: s.id,
 		Data:     b,
 	}
-	s.out <- p
 	return len(b), nil
 }
 
