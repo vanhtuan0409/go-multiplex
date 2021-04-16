@@ -48,10 +48,6 @@ func client() {
 		Conn: conn,
 	}
 
-	numClient := 5
-	var wg sync.WaitGroup
-	wg.Add(numClient)
-
 	stats := make(chan bool, 100)
 	ticker := time.NewTicker(time.Second)
 	matched := 0
@@ -73,6 +69,9 @@ func client() {
 		}
 	}()
 
+	numClient := 5
+	var wg sync.WaitGroup
+	wg.Add(numClient)
 	for i := 0; i < numClient; i++ {
 		go func(id int) {
 			defer wg.Done()
