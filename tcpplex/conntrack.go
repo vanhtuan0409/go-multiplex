@@ -27,6 +27,9 @@ func (t *Conntrack) Register(s *Stream) {
 		return
 	}
 
+  // register
+	t.m[s.id] = s
+
 	// deregister on close
 	s.onClose = func() {
 		delete(t.m, s.id)
