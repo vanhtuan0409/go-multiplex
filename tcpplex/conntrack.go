@@ -3,21 +3,21 @@ package main
 import "errors"
 
 var (
-	ErrStreamExisted = errors.New("stream existed")
-	currStreamID     = 0
+	ErrStreamExisted       = errors.New("stream existed")
+	currStreamID     int16 = 0
 )
 
 type Conntrack struct {
-	m map[int]*Stream
+	m map[int16]*Stream
 }
 
 func NewConntrackTable() *Conntrack {
 	return &Conntrack{
-		m: make(map[int]*Stream),
+		m: make(map[int16]*Stream),
 	}
 }
 
-func (t *Conntrack) NextID() int {
+func (t *Conntrack) NextID() int16 {
 	currStreamID += 1
 	return currStreamID
 }
@@ -40,7 +40,7 @@ func (t *Conntrack) Register(s *Stream) {
 }
 
 // Destroy passive destroy a stream when remote end was closed
-func (t *Conntrack) Destroy(id int) {
+func (t *Conntrack) Destroy(id int16) {
 	s, ok := t.m[id]
 	if !ok {
 		return
@@ -54,7 +54,7 @@ func (t *Conntrack) DestroyAll() {
 	}
 }
 
-func (t *Conntrack) Lookup(id int) *Stream {
+func (t *Conntrack) Lookup(id int16) *Stream {
 	s, ok := t.m[id]
 	if !ok {
 		return nil

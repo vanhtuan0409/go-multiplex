@@ -1,7 +1,7 @@
 package main
 
 import (
-	"encoding/gob"
+	"encoding/binary"
 	"io"
 )
 
@@ -12,7 +12,7 @@ const (
 )
 
 type packet struct {
-	StreamID int
+	StreamID int16
 	Flag     byte
 	Data     []byte
 }
@@ -26,11 +26,33 @@ func (p packet) Has(flags ...byte) bool {
 }
 
 func encode(w io.Writer, p packet) error {
-	encoder := gob.NewEncoder(w)
-	return encoder.Encode(p)
+	errs := []error{
+		binary.Write(w, binary.BigEndian, p.StreamID),
+		binary.Write(w, binary.BigEndian, p.Flag),
+		binary.Write(w, binary.BigEndian, int32(len(p.Data))),
+	}
+	for _, e := range errs {
+		if e != nil {
+			return e
+		}
+	}
+
+	_, err := w.Write(p.Data)
+	return err
 }
 
 func decode(r io.Reader, out *packet) error {
-	decoder := gob.NewDecoder(r)
-	return decoder.Decode(out)
+	var l int16
+	errs := []error{
+		binary.Read(r, binary.BigEndian, &out.StreamID),
+		binary.Read(r, binary.BigEndian, &out.Flag),
+		binary.Read(r, binary.BigEndian, &l),
+	}
+	for _, e := range errs {
+		if e != nil {
+			return e
+		}
+	}
+	out.Data = make([]byte, l)
+	return binary.Read(r, binary.BigEndian, &out.Data)
 }

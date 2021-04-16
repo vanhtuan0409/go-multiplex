@@ -90,7 +90,7 @@ func (c *MultiPlexClient) loopWrite() {
 	}
 }
 
-func (c *MultiPlexClient) createStream(id int) *Stream {
+func (c *MultiPlexClient) createStream(id int16) *Stream {
 	s := NewStream(id)
 	s.out = c.outBuf
 	c.m.Register(s)
@@ -174,7 +174,7 @@ func (sv *MultiPlexServer) loopWrite() {
 	}
 }
 
-func (sv *MultiPlexServer) createStream(id int) *Stream {
+func (sv *MultiPlexServer) createStream(id int16) *Stream {
 	s := NewStream(id)
 	s.out = sv.outBuf
 	sv.m.Register(s)

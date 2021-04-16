@@ -15,7 +15,7 @@ var (
 
 // Stream equal to a single connection
 type Stream struct {
-	id     int
+	id     int16
 	closed bool
 
 	pRead  *io.PipeReader
@@ -25,7 +25,7 @@ type Stream struct {
 	onClose func()
 }
 
-func NewStream(id int) *Stream {
+func NewStream(id int16) *Stream {
 	pr, pw := io.Pipe()
 	return &Stream{
 		id:     id,
