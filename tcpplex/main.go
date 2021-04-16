@@ -22,7 +22,7 @@ func worker(id int, conn *Stream, stat chan<- bool) {
 		conn.Write(msg)
 		resp, _ := r.ReadString('\n')
 		resp = strings.TrimSpace(resp)
-		fmt.Printf("[%s] Received `%s`", clientId, resp)
+		fmt.Printf("[%s] Received `%s`\n", clientId, resp)
 		stat <- (resp == clientId) // send stats
 		time.Sleep(time.Second)
 	}

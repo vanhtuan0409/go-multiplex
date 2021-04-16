@@ -74,7 +74,7 @@ func (c *MultiPlexClient) loopRead() {
 		}
 
 		// exchange data between 2 end
-		s.buf <- p.Data
+		s.pWrite.Write(p.Data)
 	}
 }
 
@@ -144,7 +144,7 @@ func (sv *MultiPlexServer) loopRead() {
 		}
 
 		// exchange data between 2 end
-		s.buf <- p.Data
+		s.pWrite.Write(p.Data)
 
 	}
 }

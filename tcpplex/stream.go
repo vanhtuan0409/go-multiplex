@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"io"
 	"time"
 )
 
@@ -15,17 +16,21 @@ var (
 // Stream equal to a single connection
 type Stream struct {
 	id     int
-	buf    chan []byte
 	closed bool
+
+	pRead  *io.PipeReader
+	pWrite *io.PipeWriter
 
 	onWrite func(p packet) error
 	onClose func()
 }
 
 func NewStream(id int) *Stream {
+	pr, pw := io.Pipe()
 	return &Stream{
-		id:  id,
-		buf: make(chan []byte, 1000),
+		id:     id,
+		pRead:  pr,
+		pWrite: pw,
 	}
 }
 
@@ -33,10 +38,7 @@ func (s *Stream) Read(b []byte) (int, error) {
 	if s.closed {
 		return 0, ErrStreamClosed
 	}
-
-	received := <-s.buf
-	n := copy(b, received)
-	return n, nil
+	return s.pRead.Read(b)
 }
 
 func (s *Stream) Write(b []byte) (int, error) {
@@ -70,5 +72,6 @@ func (s *Stream) Close() error {
 func (s *Stream) destroy() {
 	s.closed = true
 	s.onClose()
-	close(s.buf)
+	s.pWrite.Close()
+	s.pWrite.Close()
 }
