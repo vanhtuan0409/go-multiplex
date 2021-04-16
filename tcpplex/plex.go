@@ -4,10 +4,12 @@ import (
 	"errors"
 	"net"
 	"sync"
+	"time"
 )
 
 var (
 	ErrHandleClosed = errors.New("handle closed")
+	ErrTimeout      = errors.New("timeout")
 	ErrServerClosed = errors.New("server closed")
 
 	FSYNC byte = 1
@@ -34,6 +36,22 @@ type Handle struct {
 func (h *Handle) Dial() error {
 	h.Lock()
 	defer h.Lock()
+	h.send(packet{
+		handleId: h.id,
+		flag:     FSYNC,
+		data:     []byte{},
+	})
+
+	p, err := h.receive()
+	if err != nil {
+		return err
+	}
+
+	// Chec SYN-ACK
+	fsynack := FSYNC & FACK
+	if p.flag&fsynack != fsynack {
+		return ErrHandleClosed
+	}
 
 	return nil
 }
@@ -90,9 +108,12 @@ func (h *Handle) send(p packet) error {
 }
 
 func (h *Handle) receive() (packet, error) {
+	ticker := time.NewTimer(5 * time.Second)
 	select {
 	case p := <-h.in:
 		return p, nil
+	case <-ticker.C:
+		return packet{}, ErrTimeout
 	default:
 		return packet{}, ErrHandleClosed
 	}
@@ -119,11 +140,10 @@ func NewMultiplexClient(conn net.Conn) *MultiPlexClient {
 
 // NewHandle equal to Dial
 func (c *MultiPlexClient) NewHandle() (*Handle, error) {
-	hOut := make(chan packet, 100)
 	h := &Handle{
 		id:  c.maxId,
 		in:  make(chan packet, 100),
-		out: hOut,
+		out: make(chan packet, 100),
 	}
 	c.maxId += 1
 	if err := h.Dial(); err != nil {
@@ -132,11 +152,12 @@ func (c *MultiPlexClient) NewHandle() (*Handle, error) {
 
 	// send to main loopWrite
 	go func() {
-		for p := range hOut {
+		for p := range h.out {
 			c.bufOut <- p
 		}
 	}()
 
+	c.hs[h.id] = h
 	return h, nil
 }
 
@@ -208,6 +229,29 @@ func (s *MultiPlexServer) loopRead() {
 		}
 
 		// handle multiple flag here
+
+		// handle SYNC new connection
+		if p.flag&FSYNC == FSYNC {
+			// send back SYN-ACK
+			h := Handle{
+				id:  p.handleId,
+				in:  make(chan packet, 100),
+				out: make(chan packet, 100),
+			}
+			go func() {
+				for p := range h.out {
+					s.bufOut <- p
+				}
+			}()
+			h.send(packet{
+				handleId: p.handleId,
+				flag:     FSYNC & FACK,
+				data:     []byte{},
+			})
+			s.hs[h.id] = &h
+			s.backlog <- &h
+			return
+		}
 
 		h.in <- *p
 	}
