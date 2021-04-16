@@ -21,7 +21,7 @@ type Stream struct {
 	pRead  *io.PipeReader
 	pWrite *io.PipeWriter
 
-	onWrite func(p packet) error
+	out     chan packet
 	onClose func()
 }
 
@@ -49,9 +49,7 @@ func (s *Stream) Write(b []byte) (int, error) {
 		StreamID: s.id,
 		Data:     b,
 	}
-	if err := s.onWrite(p); err != nil {
-		return 0, err
-	}
+	s.out <- p
 	return len(b), nil
 }
 
@@ -60,11 +58,11 @@ func (s *Stream) Close() error {
 	if s.closed {
 		return ErrStreamClosed
 	}
-	s.onWrite(packet{
+	s.out <- packet{
 		StreamID: s.id,
 		Flag:     FFIN,
 		Data:     []byte{},
-	})
+	}
 	s.destroy()
 	return nil
 }

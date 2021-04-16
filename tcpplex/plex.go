@@ -14,6 +14,8 @@ type MultiPlexClient struct {
 	conn    net.Conn
 	m       *Conntrack
 	backlog chan *Stream
+
+	outBuf chan packet
 }
 
 func NewMultiplexClient(conn net.Conn) *MultiPlexClient {
@@ -21,9 +23,11 @@ func NewMultiplexClient(conn net.Conn) *MultiPlexClient {
 		conn:    conn,
 		m:       NewConntrackTable(),
 		backlog: make(chan *Stream, 1000),
+		outBuf:  make(chan packet, 1000),
 	}
 
 	go c.loopRead()
+	go c.loopWrite()
 	return c
 }
 
@@ -79,11 +83,15 @@ func (c *MultiPlexClient) loopRead() {
 	}
 }
 
+func (c *MultiPlexClient) loopWrite() {
+	for p := range c.outBuf {
+		encode(c.conn, p)
+	}
+}
+
 func (c *MultiPlexClient) createStream(id int) *Stream {
 	s := NewStream(id)
-	s.onWrite = func(p packet) error {
-		return encode(c.conn, p)
-	}
+	s.out = c.outBuf
 	c.m.Register(s)
 	return s
 }
@@ -93,6 +101,7 @@ type MultiPlexServer struct {
 	m    *Conntrack
 
 	backlog chan *Stream
+	outBuf  chan packet
 }
 
 func NewMultiplexServer(conn net.Conn) *MultiPlexServer {
@@ -100,9 +109,11 @@ func NewMultiplexServer(conn net.Conn) *MultiPlexServer {
 		conn:    conn,
 		m:       NewConntrackTable(),
 		backlog: make(chan *Stream, 1000),
+		outBuf:  make(chan packet, 1000),
 	}
 
 	go sv.loopRead()
+	go sv.loopWrite()
 	return sv
 }
 
@@ -151,11 +162,15 @@ func (sv *MultiPlexServer) loopRead() {
 	}
 }
 
+func (sv *MultiPlexServer) loopWrite() {
+	for p := range sv.outBuf {
+		encode(sv.conn, p)
+	}
+}
+
 func (sv *MultiPlexServer) createStream(id int) *Stream {
 	s := NewStream(id)
-	s.onWrite = func(p packet) error {
-		return encode(sv.conn, p)
-	}
+	s.out = sv.outBuf
 	sv.m.Register(s)
 	return s
 }
