@@ -8,6 +8,7 @@ import (
 
 var (
 	ErrHandleClosed = errors.New("handle closed")
+	ErrServerClosed = errors.New("server closed")
 )
 
 type packet struct {
@@ -20,8 +21,8 @@ type packet struct {
 type Handle struct {
 	id int
 
-	in  <-chan packet
-	out chan<- packet
+	in  chan packet
+	out chan packet
 
 	sync.Mutex
 }
@@ -63,6 +64,14 @@ func (h *Handle) Close() error {
 	h.Lock()
 	defer h.Lock()
 
+	h.send(packet{
+		handleId: h.id,
+		// flag here
+	})
+
+	close(h.in)
+	close(h.out)
+
 	return nil
 }
 
@@ -90,15 +99,37 @@ func NewMultiplexClient(conn net.Conn) *MultiPlexClient {
 	}
 }
 
+// NewHandle equal to Dial
+func (c *MultiPlexClient) NewHandle() (*Handle, error) {
+	h := &Handle{
+		id:  c.maxId,
+		in:  make(chan packet, 100),
+		out: make(chan packet, 100),
+	}
+	c.maxId += 1
+	if err := h.Dial(); err != nil {
+		return nil, err
+	}
+	return h, nil
+}
+
 type MultiPlexServer struct {
 	conn net.Conn
 
-	hs map[int]*Handle
+	backlog chan *Handle
 }
 
 func NewMultiplexServer(conn net.Conn) *MultiPlexServer {
 	return &MultiPlexServer{
 		conn: conn,
-		hs:   make(map[int]*Handle),
+	}
+}
+
+func (s *MultiPlexServer) Accept() (*Handle, error) {
+	select {
+	case h := <-s.backlog:
+		return h, nil
+	default:
+		return nil, ErrServerClosed
 	}
 }
