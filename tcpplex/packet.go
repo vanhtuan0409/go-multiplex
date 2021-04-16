@@ -42,7 +42,7 @@ func encode(w io.Writer, p packet) error {
 }
 
 func decode(r io.Reader, out *packet) error {
-	var l int16
+	var l int32
 	errs := []error{
 		binary.Read(r, binary.BigEndian, &out.StreamID),
 		binary.Read(r, binary.BigEndian, &out.Flag),
@@ -53,6 +53,7 @@ func decode(r io.Reader, out *packet) error {
 			return e
 		}
 	}
+
 	out.Data = make([]byte, l)
 	return binary.Read(r, binary.BigEndian, &out.Data)
 }

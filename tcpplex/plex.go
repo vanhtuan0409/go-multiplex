@@ -51,8 +51,6 @@ func (c *MultiPlexClient) loopRead() {
 			break
 		}
 
-		log.Printf("[Client] Received packet: %+v", p)
-
 		// received SYN-ACK from remote, setup new stream
 		// in fact, we shoud track multiple stage of connection handshake
 		// not only as simple as this
@@ -83,7 +81,6 @@ func (c *MultiPlexClient) loopRead() {
 
 func (c *MultiPlexClient) loopWrite() {
 	for p := range c.outBuf {
-		log.Printf("[Client] Sending packet: %+v", p)
 		if err := encode(c.conn, p); err != nil {
 			log.Printf("[Client] Failed to send packet. ERR: %+v", err)
 		}
@@ -131,8 +128,6 @@ func (sv *MultiPlexServer) loopRead() {
 			break
 		}
 
-		log.Printf("[Server] Received packet: %+v", p)
-
 		// receive SYN packet, return SYN-ACK
 		if p.Has(FSYNC) {
 			sv.outBuf <- packet{
@@ -167,7 +162,6 @@ func (sv *MultiPlexServer) loopRead() {
 
 func (sv *MultiPlexServer) loopWrite() {
 	for p := range sv.outBuf {
-		log.Printf("[Server] Sending packet: %+v", p)
 		if err := encode(sv.conn, p); err != nil {
 			log.Printf("[Server] Failed to send packet. ERR: %+v", err)
 		}
