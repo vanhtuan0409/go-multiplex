@@ -64,6 +64,7 @@ func (c *MultiPlexClient) loopRead() {
 		// ignore (or send RESET)
 		s := c.m.Lookup(p.StreamID)
 		if s == nil {
+			log.Printf("[Client] Dropped packet due to no recorded stream. Packet: +%v", p)
 			continue
 		}
 
@@ -134,6 +135,7 @@ func (sv *MultiPlexServer) loopRead() {
 		// ignore (or send RESET)
 		s := sv.m.Lookup(p.StreamID)
 		if s == nil {
+			log.Printf("[Server] Dropped packet due to no recorded stream. Packet: +%v", p)
 			continue
 		}
 
