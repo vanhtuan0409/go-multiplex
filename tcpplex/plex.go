@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"net"
+	"sync"
 )
 
 var (
@@ -21,49 +22,57 @@ type Handle struct {
 
 	in  <-chan packet
 	out chan<- packet
+
+	sync.Mutex
 }
 
 func (h *Handle) Dial() error {
+	h.Lock()
+	defer h.Lock()
+
 	return nil
 }
 
 func (h *Handle) Read(b []byte) (int, error) {
-	p, ok := <-h.in
-	if !ok {
-		return 0, ErrHandleClosed
+	h.Lock()
+	defer h.Lock()
+
+	p, err := h.receive()
+	if err != nil {
+		return 0, err
 	}
 	n := copy(b, p.data)
 	return n, nil
 }
 
 func (h *Handle) Write(b []byte) (int, error) {
-	select {
+	h.Lock()
+	defer h.Lock()
 
-	case h.out <- packet{
+	err := h.send(packet{
 		handleId: h.id,
 		data:     b,
-	}:
-		return len(b), nil
-
-	default:
-		return 0, ErrHandleClosed
-
+	})
+	if err != nil {
+		return 0, err
 	}
+	return len(b), nil
 }
 
 func (h *Handle) Close() error {
-	h.out <- packet{
-		handleId: h.id,
-		//todo add flag
-	}
+	h.Lock()
+	defer h.Lock()
+
 	return nil
 }
 
 func (h *Handle) send(p packet) error {
+	// can implement retry and SYN-ACK here
 	return nil
 }
 
 func (h *Handle) receive() (packet, error) {
+	// can implement retry and SYN-ACK here
 	return packet{}, nil
 }
 
