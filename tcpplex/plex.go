@@ -33,15 +33,11 @@ func NewMultiplexClient(conn net.Conn) *MultiPlexClient {
 
 func (c *MultiPlexClient) Dial() (*Stream, error) {
 	// sending SYN for initial a new connection
-	err := encode(c.conn, packet{
+	c.outBuf <- packet{
 		StreamID: c.m.NextID(),
 		Flag:     FSYNC,
 		Data:     []byte{},
-	})
-	if err != nil {
-		return nil, err
 	}
-
 	s := <-c.backlog
 	return s, nil
 }
@@ -85,6 +81,7 @@ func (c *MultiPlexClient) loopRead() {
 
 func (c *MultiPlexClient) loopWrite() {
 	for p := range c.outBuf {
+		log.Printf("[Client] Sending packet: %+v\n", p)
 		encode(c.conn, p)
 	}
 }
@@ -132,11 +129,11 @@ func (sv *MultiPlexServer) loopRead() {
 
 		// receive SYN packet, return SYN-ACK
 		if p.Has(FSYNC) {
-			encode(sv.conn, packet{
+			sv.outBuf <- packet{
 				StreamID: p.StreamID,
 				Flag:     FSYNC | FACK,
 				Data:     []byte{},
-			})
+			}
 			s := sv.createStream(p.StreamID)
 			sv.backlog <- s
 			continue
@@ -164,6 +161,7 @@ func (sv *MultiPlexServer) loopRead() {
 
 func (sv *MultiPlexServer) loopWrite() {
 	for p := range sv.outBuf {
+		log.Printf("[Server] Sending packet: %+v\n", p)
 		encode(sv.conn, p)
 	}
 }
