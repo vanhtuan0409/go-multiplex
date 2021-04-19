@@ -9,11 +9,15 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	multiplex "github.com/vanhtuan0409/go-multiplex"
 )
 
 var (
 	port = 7575
 	lock bool
+
+	stats *multiplex.Stats
 )
 
 type netConn struct {
@@ -21,7 +25,7 @@ type netConn struct {
 	sync.Mutex
 }
 
-func worker(id int, conn *netConn, stat chan<- bool) {
+func worker(id int, conn *netConn) {
 	clientId := fmt.Sprintf("client%d", id)
 	r := bufio.NewReader(conn)
 	for {
@@ -34,7 +38,13 @@ func worker(id int, conn *netConn, stat chan<- bool) {
 			conn.Write(append([]byte(clientId), '\n'))
 			resp, _ := r.ReadString('\n')
 			resp = strings.TrimSpace(resp)
-			stat <- (resp == clientId) // send stats
+
+			stats.Record("total", 1)
+			if clientId == resp {
+				stats.Record("matched", 1)
+			} else {
+				stats.Record("unmatched", 1)
+			}
 		}()
 	}
 }
@@ -48,34 +58,13 @@ func client() {
 		Conn: conn,
 	}
 
-	stats := make(chan bool, 100)
-	ticker := time.NewTicker(time.Second)
-	matched := 0
-	unmatched := 0
-	go func() {
-		for {
-			select {
-			case isMatched := <-stats:
-				if isMatched {
-					matched += 1
-				} else {
-					unmatched += 1
-				}
-			case <-ticker.C:
-				log.Printf("Stats per sec. Matched: %d, Unmatched: %d, Total: %d", matched, unmatched, matched+unmatched)
-				matched = 0
-				unmatched = 0
-			}
-		}
-	}()
-
 	numClient := 5
 	var wg sync.WaitGroup
 	wg.Add(numClient)
 	for i := 0; i < numClient; i++ {
 		go func(id int) {
 			defer wg.Done()
-			worker(id, nc, stats)
+			worker(id, nc)
 		}(i)
 	}
 
@@ -117,6 +106,7 @@ func main() {
 	flag.BoolVar(&lock, "lock", false, "Perform lock on request")
 	flag.Parse()
 
+	stats = multiplex.NewStats(time.Second)
 	go server()
 	time.Sleep(time.Second)
 	client()

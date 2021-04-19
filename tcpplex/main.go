@@ -8,13 +8,17 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	multiplex "github.com/vanhtuan0409/go-multiplex"
 )
 
 var (
 	port = 7575
+
+	stats *multiplex.Stats
 )
 
-func worker(id int, conn *Stream, stat chan<- bool) {
+func worker(id int, conn *Stream) {
 	clientId := fmt.Sprintf("client%d", id)
 	r := bufio.NewReader(conn)
 	for {
@@ -22,7 +26,13 @@ func worker(id int, conn *Stream, stat chan<- bool) {
 		conn.Write(msg)
 		resp, _ := r.ReadString('\n')
 		resp = strings.TrimSpace(resp)
-		stat <- (resp == clientId) // send stats
+
+		stats.Record("total", 1)
+		if clientId == resp {
+			stats.Record("matched", 1)
+		} else {
+			stats.Record("unmatched", 1)
+		}
 	}
 }
 
@@ -31,27 +41,6 @@ func client() {
 	if err != nil {
 		panic(err)
 	}
-
-	stats := make(chan bool, 100)
-	ticker := time.NewTicker(time.Second)
-	matched := 0
-	unmatched := 0
-	go func() {
-		for {
-			select {
-			case isMatched := <-stats:
-				if isMatched {
-					matched += 1
-				} else {
-					unmatched += 1
-				}
-			case <-ticker.C:
-				log.Printf("Stats per sec. Matched: %d, Unmatched: %d, Total: %d", matched, unmatched, matched+unmatched)
-				matched = 0
-				unmatched = 0
-			}
-		}
-	}()
 
 	plexClient := NewMultiplexClient(conn)
 	numClient := 5
@@ -66,7 +55,7 @@ func client() {
 				return
 			}
 
-			worker(id, stream, stats)
+			worker(id, stream)
 		}(i)
 	}
 
@@ -108,6 +97,7 @@ func server() {
 }
 
 func main() {
+	stats = multiplex.NewStats(time.Second)
 	go server()
 	time.Sleep(time.Second)
 	client()
