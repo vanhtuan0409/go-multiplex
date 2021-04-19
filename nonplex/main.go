@@ -9,7 +9,8 @@ import (
 	"sync"
 	"time"
 
-	multiplex "github.com/vanhtuan0409/go-multiplex"
+	"github.com/vanhtuan0409/go-multiplex"
+	util "github.com/vanhtuan0409/go-multiplex"
 )
 
 var (
@@ -36,19 +37,15 @@ func NewClientFactory() *ClientFactory {
 	}
 }
 
-func (f *ClientFactory) GetNewClient(id int) (*multiplex.Worker, error) {
-	return &multiplex.Worker{
+func (f *ClientFactory) GetNewClient(id int) (*util.Worker, error) {
+	return &util.Worker{
 		ID:     id,
 		Conn:   f.conn,
 		Atomic: lock,
 	}, nil
 }
 
-type NetListener struct {
-	c chan multiplex.Conn
-}
-
-func (l *NetListener) Run() {
+func server() {
 	nl, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		panic(err)
@@ -61,25 +58,15 @@ func (l *NetListener) Run() {
 			break
 		}
 
-		l.c <- &netConn{Conn: conn}
+		go util.HandleConn(conn)
 	}
-}
-
-func (l *NetListener) Accept() (multiplex.Conn, error) {
-	conn := <-l.c
-	return conn, nil
 }
 
 func main() {
 	flag.BoolVar(&lock, "lock", false, "Perform lock on request")
 	flag.Parse()
 
-	server := multiplex.Server{
-		L: &NetListener{
-			c: make(chan multiplex.Conn, 1024),
-		},
-	}
-	go server.Run()
+	go server()
 
 	time.Sleep(time.Second)
 	generator := multiplex.LoadGenerator{
