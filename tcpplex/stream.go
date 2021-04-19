@@ -18,10 +18,10 @@ type Stream struct {
 	id     int16
 	closed bool
 
-	pRead  *io.PipeReader
-	pWrite *io.PipeWriter
+	pRead  *io.PipeReader // use as input source for Stream's read
+	pWrite *io.PipeWriter // use as a output destination for Transport when receiving a packet
+	out    chan packet    // use as output destination for Stream's write
 
-	out     chan packet
 	onClose func()
 }
 

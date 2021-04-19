@@ -6,9 +6,10 @@ import (
 )
 
 const (
-	FSYNC byte = 1
-	FACK  byte = 10
-	FFIN  byte = 100
+	FSYNC  byte = 1
+	FACK   byte = 2
+	FFIN   byte = 4
+	FRESET byte = 8
 )
 
 type packet struct {
