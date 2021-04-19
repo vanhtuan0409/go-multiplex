@@ -1,12 +1,10 @@
 package main
 
 import (
-	"bufio"
+	"context"
 	"fmt"
 	"log"
 	"net"
-	"strings"
-	"sync"
 	"time"
 
 	multiplex "github.com/vanhtuan0409/go-multiplex"
@@ -18,87 +16,77 @@ var (
 	stats *multiplex.Stats
 )
 
-func worker(id int, conn *Stream) {
-	clientId := fmt.Sprintf("client%d", id)
-	r := bufio.NewReader(conn)
-	for {
-		msg := append([]byte(clientId), '\n')
-		conn.Write(msg)
-		resp, _ := r.ReadString('\n')
-		resp = strings.TrimSpace(resp)
-
-		stats.Record("total", 1)
-		if clientId == resp {
-			stats.Record("matched", 1)
-		} else {
-			stats.Record("unmatched", 1)
-		}
-	}
+type ClientFactory struct {
+	client *MultiPlexClient
 }
 
-func client() {
+func NewClientFactory() *ClientFactory {
 	conn, err := net.Dial("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		panic(err)
 	}
 
-	plexClient := NewMultiplexClient(conn)
-	numClient := 5
-	var wg sync.WaitGroup
-	wg.Add(numClient)
-	for i := 0; i < numClient; i++ {
-		go func(id int) {
-			defer wg.Done()
-			stream, err := plexClient.Dial()
-			if err != nil {
-				log.Printf("Failed to create stream. ERR: %v", err)
-				return
-			}
-
-			worker(id, stream)
-		}(i)
+	return &ClientFactory{
+		client: NewMultiplexClient(conn),
 	}
-
-	wg.Wait()
 }
 
-func server() {
-	l, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+func (f *ClientFactory) GetNewClient(id int) (*multiplex.Worker, error) {
+	stream, err := f.client.Dial()
+	if err != nil {
+		return nil, err
+	}
+
+	return &multiplex.Worker{
+		ID:     id,
+		Conn:   stream,
+		Atomic: false,
+	}, nil
+}
+
+type PlexListener struct {
+	c chan multiplex.Conn
+}
+
+func (l *PlexListener) Run() {
+	nl, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		panic(err)
 	}
-	log.Printf("Start listening on :%d", port)
+	log.Printf("Server running at: %d", port)
 
 	for {
-		conn, err := l.Accept()
+		conn, err := nl.Accept()
 		if err != nil {
-			continue
+			break
 		}
 
 		plexServer := NewMultiplexServer(conn)
 		for {
-			stream := plexServer.Accept()
-			go func(s *Stream) {
-				defer s.Close()
-				r := bufio.NewReader(s)
-				for {
-					line, err := r.ReadBytes('\n')
-					if err != nil {
-						break
-					}
-					if _, err := s.Write(line); err != nil {
-						break
-					}
-				}
-
-			}(stream)
+			s := plexServer.Accept()
+			l.c <- s
 		}
 	}
 }
 
+func (l *PlexListener) Accept() (multiplex.Conn, error) {
+	conn := <-l.c
+	return conn, nil
+}
+
 func main() {
-	stats = multiplex.NewStats(time.Second)
-	go server()
+	server := multiplex.Server{
+		L: &PlexListener{
+			c: make(chan multiplex.Conn, 1024),
+		},
+	}
+	go server.Run()
+
 	time.Sleep(time.Second)
-	client()
+	generator := multiplex.LoadGenerator{
+		NumWorker: 5,
+		C:         NewClientFactory(),
+		Stats:     multiplex.NewStats(time.Second),
+	}
+	generator.Run(context.Background())
 }

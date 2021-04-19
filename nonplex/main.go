@@ -1,12 +1,11 @@
 package main
 
 import (
-	"bufio"
+	"context"
 	"flag"
 	"fmt"
 	"log"
 	"net"
-	"strings"
 	"sync"
 	"time"
 
@@ -16,8 +15,6 @@ import (
 var (
 	port = 7575
 	lock bool
-
-	stats *multiplex.Stats
 )
 
 type netConn struct {
@@ -25,89 +22,70 @@ type netConn struct {
 	sync.Mutex
 }
 
-func worker(id int, conn *netConn) {
-	clientId := fmt.Sprintf("client%d", id)
-	r := bufio.NewReader(conn)
-	for {
-		func() {
-			if lock {
-				conn.Lock()
-				defer conn.Unlock()
-			}
-
-			conn.Write(append([]byte(clientId), '\n'))
-			resp, _ := r.ReadString('\n')
-			resp = strings.TrimSpace(resp)
-
-			stats.Record("total", 1)
-			if clientId == resp {
-				stats.Record("matched", 1)
-			} else {
-				stats.Record("unmatched", 1)
-			}
-		}()
-	}
+type ClientFactory struct {
+	conn *netConn
 }
 
-func client() {
+func NewClientFactory() *ClientFactory {
 	conn, err := net.Dial("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		panic(err)
 	}
-	nc := &netConn{
-		Conn: conn,
+	return &ClientFactory{
+		conn: &netConn{Conn: conn},
 	}
-
-	numClient := 5
-	var wg sync.WaitGroup
-	wg.Add(numClient)
-	for i := 0; i < numClient; i++ {
-		go func(id int) {
-			defer wg.Done()
-			worker(id, nc)
-		}(i)
-	}
-
-	wg.Wait()
-
 }
 
-func server() {
-	l, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+func (f *ClientFactory) GetNewClient(id int) (*multiplex.Worker, error) {
+	return &multiplex.Worker{
+		ID:     id,
+		Conn:   f.conn,
+		Atomic: lock,
+	}, nil
+}
+
+type NetListener struct {
+	c chan multiplex.Conn
+}
+
+func (l *NetListener) Run() {
+	nl, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		panic(err)
 	}
-	log.Printf("Start listening on :%d", port)
+	log.Printf("Server running at: %d", port)
 
 	for {
-		conn, err := l.Accept()
+		conn, err := nl.Accept()
 		if err != nil {
-			continue
+			break
 		}
 
-		// Connection handler
-		go func(c net.Conn) {
-			defer c.Close()
-			r := bufio.NewReader(c)
-			for {
-				line, err := r.ReadBytes('\n')
-				if err != nil {
-					break
-				}
-				if _, err := c.Write([]byte(line)); err != nil {
-					break
-				}
-			}
-		}(conn)
+		l.c <- &netConn{Conn: conn}
 	}
+}
+
+func (l *NetListener) Accept() (multiplex.Conn, error) {
+	conn := <-l.c
+	return conn, nil
 }
 
 func main() {
 	flag.BoolVar(&lock, "lock", false, "Perform lock on request")
 	flag.Parse()
 
-	stats = multiplex.NewStats(time.Second)
-	go server()
+	server := multiplex.Server{
+		L: &NetListener{
+			c: make(chan multiplex.Conn, 1024),
+		},
+	}
+	go server.Run()
+
 	time.Sleep(time.Second)
-	client()
+	generator := multiplex.LoadGenerator{
+		NumWorker: 5,
+		C:         NewClientFactory(),
+		Stats:     multiplex.NewStats(time.Second),
+	}
+	generator.Run(context.Background())
 }

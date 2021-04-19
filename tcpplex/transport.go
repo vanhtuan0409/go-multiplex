@@ -51,6 +51,8 @@ func (t *Transport) loopRead() {
 			break
 		}
 
+		// log.Printf("[%s] Received packet: %+v", t.options.LogPrefix, p)
+
 		// received SYN-ACK from remote, setup new stream
 		// in fact, we shoud track multiple stage of connection handshake
 		// not only as simple as this

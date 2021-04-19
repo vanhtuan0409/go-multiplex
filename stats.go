@@ -41,14 +41,21 @@ func (s *Stats) run() {
 
 		case <-s.ticker.C: // print log every time.Interval
 			msgs := []string{}
-			for name, val := range s.stats {
-				msgs = append(msgs, fmt.Sprintf("%s: %d", name, val))
+			for _, name := range []string{"matched", "unmatched", "total"} {
+				msgs = append(msgs, fmt.Sprintf("%s: %d", name, s.get(name)))
 				s.stats[name] = 0
 			}
 			log.Printf("Stats: %s", strings.Join(msgs, ", "))
 		}
 	}
+}
 
+func (s *Stats) get(name string) int {
+	val, ok := s.stats[name]
+	if ok {
+		return val
+	}
+	return 0
 }
 
 func (s *Stats) Record(name string, delta int) {

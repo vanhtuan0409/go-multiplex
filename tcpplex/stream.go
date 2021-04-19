@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"io"
+	"sync"
 	"time"
 )
 
@@ -23,6 +24,8 @@ type Stream struct {
 	out    chan packet    // use as output destination for Stream's write
 
 	onClose func()
+
+	sync.Mutex
 }
 
 func NewStream(id int16) *Stream {
