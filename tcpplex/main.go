@@ -45,18 +45,27 @@ func (f *ClientFactory) GetNewClient(id int) (*multiplex.Worker, error) {
 }
 
 type PlexListener struct {
-	c chan multiplex.Conn
+	c  chan multiplex.Conn
+	nl net.Listener
 }
 
-func (l *PlexListener) Run() {
+func NewPlexListener() *PlexListener {
 	nl, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		panic(err)
 	}
 	log.Printf("Server running at: %d", port)
 
+	return &PlexListener{
+		nl: nl,
+		c:  make(chan multiplex.Conn, 1024),
+	}
+
+}
+
+func (l *PlexListener) Run() {
 	for {
-		conn, err := nl.Accept()
+		conn, err := l.nl.Accept()
 		if err != nil {
 			break
 		}
@@ -76,9 +85,7 @@ func (l *PlexListener) Accept() (multiplex.Conn, error) {
 
 func main() {
 	server := multiplex.Server{
-		L: &PlexListener{
-			c: make(chan multiplex.Conn, 1024),
-		},
+		L: NewPlexListener(),
 	}
 	go server.Run()
 
