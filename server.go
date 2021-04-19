@@ -2,19 +2,10 @@ package multiplex
 
 import (
 	"bufio"
-	"log"
+	"io"
 )
 
-type Listener interface {
-	Run()
-	Accept() (Conn, error)
-}
-
-type Server struct {
-	L Listener
-}
-
-func (s *Server) handleConn(conn Conn) {
+func HandleConn(conn io.ReadWriteCloser) {
 	defer conn.Close()
 
 	r := bufio.NewReader(conn)
@@ -28,17 +19,4 @@ func (s *Server) handleConn(conn Conn) {
 		}
 	}
 
-}
-
-func (s *Server) Run() {
-	go s.L.Run()
-	for {
-		conn, err := s.L.Accept()
-		if err != nil {
-			log.Printf("Failed to accept connection. ERR: %+v", err)
-			break
-		}
-
-		go s.handleConn(conn)
-	}
 }

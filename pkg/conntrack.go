@@ -1,6 +1,8 @@
-package main
+package multiplex
 
-import "errors"
+import (
+	"errors"
+)
 
 var (
 	ErrStreamExisted       = errors.New("stream existed")
@@ -33,9 +35,6 @@ func (t *Conntrack) Register(s *Stream) {
 	// deregister on close
 	s.onClose = func() {
 		delete(t.m, s.id)
-		if s.onClose != nil {
-			s.onClose()
-		}
 	}
 }
 

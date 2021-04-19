@@ -3,97 +3,69 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
-	"net"
 	"time"
 
-	multiplex "github.com/vanhtuan0409/go-multiplex"
+	util "github.com/vanhtuan0409/go-multiplex"
+	multiplex "github.com/vanhtuan0409/go-multiplex/pkg"
 )
 
 var (
 	port = 7575
 
-	stats *multiplex.Stats
+	stats *util.Stats
 )
 
 type ClientFactory struct {
-	client *MultiPlexClient
+	client *multiplex.MultiPlexClient
 }
 
 func NewClientFactory() *ClientFactory {
-	conn, err := net.Dial("tcp", fmt.Sprintf(":%d", port))
+	client, err := multiplex.NewMultiplexClient("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		panic(err)
 	}
 
 	return &ClientFactory{
-		client: NewMultiplexClient(conn),
+		client: client,
 	}
 }
 
-func (f *ClientFactory) GetNewClient(id int) (*multiplex.Worker, error) {
+func (f *ClientFactory) GetNewClient(id int) (*util.Worker, error) {
 	stream, err := f.client.Dial()
 	if err != nil {
 		return nil, err
 	}
 
-	return &multiplex.Worker{
+	return &util.Worker{
 		ID:     id,
 		Conn:   stream,
 		Atomic: false,
 	}, nil
 }
 
-type PlexListener struct {
-	c  chan multiplex.Conn
-	nl net.Listener
-}
-
-func NewPlexListener() *PlexListener {
-	nl, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+func server() {
+	l, err := multiplex.NewMultiplexServer("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		panic(err)
 	}
-	log.Printf("Server running at: %d", port)
 
-	return &PlexListener{
-		nl: nl,
-		c:  make(chan multiplex.Conn, 1024),
-	}
-
-}
-
-func (l *PlexListener) Run() {
 	for {
-		conn, err := l.nl.Accept()
+		conn, err := l.Accept()
 		if err != nil {
 			break
 		}
-
-		plexServer := NewMultiplexServer(conn)
-		for {
-			s := plexServer.Accept()
-			l.c <- s
-		}
+		go util.HandleConn(conn)
 	}
-}
-
-func (l *PlexListener) Accept() (multiplex.Conn, error) {
-	conn := <-l.c
-	return conn, nil
 }
 
 func main() {
-	server := multiplex.Server{
-		L: NewPlexListener(),
-	}
-	go server.Run()
+	go server()
 
 	time.Sleep(time.Second)
-	generator := multiplex.LoadGenerator{
+	generator := util.LoadGenerator{
 		NumWorker: 5,
 		C:         NewClientFactory(),
-		Stats:     multiplex.NewStats(time.Second),
+		Stats:     util.NewStats(time.Second),
 	}
 	generator.Run(context.Background())
 }

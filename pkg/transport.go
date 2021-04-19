@@ -1,8 +1,8 @@
-package main
+package multiplex
 
 import (
+	"io"
 	"log"
-	"net"
 )
 
 type TransportOptions struct {
@@ -13,15 +13,15 @@ type TransportOptions struct {
 type Transport struct {
 	options TransportOptions
 
-	conn net.Conn   // underlying data-link
-	m    *Conntrack // streams book-keeping
+	dlink io.ReadWriteCloser // underlying data-link
+	m     *Conntrack         // streams book-keeping
 
 	outBuf     chan packet  // out-going packet buffer, waiting to be sent to the wire
 	outBacklog chan *Stream // backlog for initialized Streams
 	inBacklog  chan *Stream // backlog for Streams waiting to be accepted
 }
 
-func NewTransport(conn net.Conn, options TransportOptions) *Transport {
+func NewTransport(dlink io.ReadWriteCloser, options TransportOptions) *Transport {
 	if options.LogPrefix == "" {
 		options.LogPrefix = "Transport"
 	}
@@ -29,8 +29,8 @@ func NewTransport(conn net.Conn, options TransportOptions) *Transport {
 	t := &Transport{
 		options: options,
 
-		conn: conn,
-		m:    NewConntrackTable(),
+		dlink: dlink,
+		m:     NewConntrackTable(),
 
 		outBuf:     make(chan packet, 1024),
 		outBacklog: make(chan *Stream, 1024),
@@ -46,7 +46,7 @@ func (t *Transport) loopRead() {
 	for {
 		// parse received packet
 		p := packet{}
-		if err := decode(t.conn, &p); err != nil {
+		if err := decode(t.dlink, &p); err != nil {
 			log.Printf("[%s] Failed to parsed packet. ERR: %+v", t.options.LogPrefix, err)
 			break
 		}
@@ -109,7 +109,7 @@ func (t *Transport) loopRead() {
 
 func (t *Transport) loopWrite() {
 	for p := range t.outBuf {
-		if err := encode(t.conn, p); err != nil {
+		if err := encode(t.dlink, p); err != nil {
 			log.Printf("[%s] Failed to send packet. ERR: %+v", t.options.LogPrefix, err)
 		}
 	}
